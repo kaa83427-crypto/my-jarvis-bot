@@ -7,6 +7,14 @@ app = Flask(__name__)
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 
+# Active models list (Fallback System)
+CANDIDATE_MODELS = [
+    "openai/gpt-oss-120b",
+    "openai/gpt-oss-20b",
+    "llama-3.3-70b-versatile",
+    "llama-3.1-8b-instant"
+]
+
 @app.route("/", methods=["GET"])
 def home():
     return "Jarvis is Online and Active!"
@@ -23,24 +31,29 @@ def webhook():
             "Content-Type": "application/json"
         }
         
-        payload = {
-            "model": "llama3-70b-8192",
-            "messages": [{"role": "user", "content": user_text}]
-        }
-        
-        try:
-            groq_res = requests.post("https://api.groq.com/openai/v1/chat/completions", json=payload, headers=headers).json()
-            
-            if "choices" in groq_res and len(groq_res["choices"]) > 0:
-                reply_text = groq_res["choices"][0]["message"]["content"]
-            elif "error" in groq_res:
-                reply_text = f"Groq Error: {groq_res['error'].get('message', 'Unknown error')}"
-            else:
-                reply_text = f"Groq Raw Response: {str(groq_res)}"
-                
-        except Exception as e:
-            reply_text = f"Server Exception: {str(e)}"
+        reply_text = None
+        last_error = ""
 
+        # Loop through available models until one works
+        for model_name in CANDIDATE_MODELS:
+            payload = {
+                "model": model_name,
+                "messages": [{"role": "user", "content": user_text}]
+            }
+            try:
+                res = requests.post("https://api.groq.com/openai/v1/chat/completions", json=payload, headers=headers).json()
+                if "choices" in res and len(res["choices"]) > 0:
+                    reply_text = res["choices"][0]["message"]["content"]
+                    break
+                elif "error" in res:
+                    last_error = res["error"].get("message", "Unknown error")
+            except Exception as e:
+                last_error = str(e)
+
+        if not reply_text:
+            reply_text = f"Groq Error: {last_error}"
+
+        # Send response to Telegram
         telegram_url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
         requests.post(telegram_url, json={"chat_id": chat_id, "text": reply_text})
 
