@@ -18,21 +18,31 @@ def webhook():
         chat_id = data["message"]["chat"]["id"]
         user_text = data["message"].get("text", "")
         
-        # Call Groq API
+        # Groq API Headers
         headers = {
             "Authorization": f"Bearer {GROQ_API_KEY}",
             "Content-Type": "application/json"
         }
+        
+        # Updated Model: llama-3.3-70b-versatile
         payload = {
-            "model": "llama3-70b-8192",
+            "model": "llama-3.3-70b-versatile",
             "messages": [{"role": "user", "content": user_text}]
         }
         
         try:
             groq_res = requests.post("https://api.groq.com/openai/v1/chat/completions", json=payload, headers=headers).json()
-            reply_text = groq_res["choices"][0]["message"]["content"]
+            
+            # Extract response
+            if "choices" in groq_res and len(groq_res["choices"]) > 0:
+                reply_text = groq_res["choices"][0]["message"]["content"]
+            elif "error" in groq_res:
+                reply_text = f"Groq Error: {groq_res['error'].get('message', 'Unknown error')}"
+            else:
+                reply_text = f"Groq Raw Response: {str(groq_res)}"
+                
         except Exception as e:
-            reply_text = "Sorry bhai, Groq response me error aaya."
+            reply_text = f"Server Exception: {str(e)}"
 
         # Send back to Telegram
         telegram_url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
