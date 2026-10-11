@@ -24,7 +24,7 @@ def webhook():
             "Content-Type": "application/json"
         }
         payload = {
-            "model": "llama-3.3-70b-versatile",
+            "model": "llama3-70b-8192",
             "messages": [{"role": "user", "content": user_text}]
         }
         
