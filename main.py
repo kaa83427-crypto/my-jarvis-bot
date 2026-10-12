@@ -15,9 +15,23 @@ CANDIDATE_MODELS = [
     "llama-3.1-8b-instant"
 ]
 
+# Memory storage for chats: {chat_id: [messages_list]}
+chat_histories = {}
+
+# JARVIS Pro-Level Personality & System Instructions
+SYSTEM_PROMPT = {
+    "role": "system",
+    "content": (
+        "You are AK JARVIS, an elite, highly intelligent, and loyal personal AI assistant "
+        "created and powered by AK MEDIA. Your creator and boss is Ankush (CEO). "
+        "You speak with ultimate confidence, professional yet friendly tone, mixing Hindi (in Latin script/Hinglish) and English naturally. "
+        "You remember previous context, address your user respectfully and smartly, and execute tasks with supreme efficiency."
+    )
+}
+
 @app.route("/", methods=["GET"])
 def home():
-    return "Jarvis is Online and Active!"
+    return "AK JARVIS Memory & Personality Core is Online!"
 
 @app.route("/webhook", methods=["POST"])
 def webhook():
@@ -26,6 +40,17 @@ def webhook():
         chat_id = data["message"]["chat"]["id"]
         user_text = data["message"].get("text", "")
         
+        # Initialize history for new chat if not present
+        if chat_id not in chat_histories:
+            chat_histories[chat_id] = [SYSTEM_PROMPT]
+        
+        # Append user message to history
+        chat_histories[chat_id].append({"role": "user", "content": user_text})
+        
+        # Keep history size manageable (last 10 messages + system prompt)
+        if len(chat_histories[chat_id]) > 11:
+            chat_histories[chat_id] = [chat_histories[chat_id][0]] + chat_histories[chat_id][-10:]
+
         headers = {
             "Authorization": f"Bearer {GROQ_API_KEY}",
             "Content-Type": "application/json"
@@ -34,11 +59,11 @@ def webhook():
         reply_text = None
         last_error = ""
 
-        # Loop through available models until one works
+        # Loop through available models with full chat history (Memory)
         for model_name in CANDIDATE_MODELS:
             payload = {
                 "model": model_name,
-                "messages": [{"role": "user", "content": user_text}]
+                "messages": chat_histories[chat_id]
             }
             try:
                 res = requests.post("https://api.groq.com/openai/v1/chat/completions", json=payload, headers=headers).json()
@@ -52,8 +77,11 @@ def webhook():
 
         if not reply_text:
             reply_text = f"Groq Error: {last_error}"
+        else:
+            # Append assistant response to history
+            chat_histories[chat_id].append({"role": "assistant", "content": reply_text})
 
-        # Send response to Telegram
+        # Send response back to Telegram
         telegram_url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
         requests.post(telegram_url, json={"chat_id": chat_id, "text": reply_text})
 
